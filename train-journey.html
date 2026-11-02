@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Interactive 3D-style train journey from Chiang Mai to Phitsanulok and back.">
+<title>3D Train Journey | Pareena Portfolio</title>
+<style>
+:root{--navy:#102c4c;--blue:#2563eb;--pale:#eaf3ff;--ink:#172b45}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f5f8fc;color:var(--ink)}
+header{display:flex;justify-content:space-between;align-items:center;padding:18px clamp(18px,5vw,64px);background:#fff;border-bottom:1px solid #e5edf6}
+.brand{font-weight:800;font-size:20px;color:var(--navy);text-decoration:none}.back{color:var(--blue);text-decoration:none;font-weight:650}
+main{max-width:1180px;margin:auto;padding:32px 18px 56px}.eyebrow{color:var(--blue);font-size:12px;font-weight:800;letter-spacing:2px}
+h1{font-size:clamp(28px,5vw,48px);line-height:1.1;margin:9px 0 10px;color:var(--navy)}
+.lead{color:#60718a;margin:0 0 22px;line-height:1.7}
+.scene-wrap{background:#dceeff;border:1px solid #d4e2f2;border-radius:22px;overflow:hidden;box-shadow:0 18px 45px #1b477018}
+canvas{display:block;width:100%;height:auto;aspect-ratio:16/9}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:16px;background:white}
+button{border:0;border-radius:999px;padding:11px 18px;font-weight:750;cursor:pointer;background:#eaf1fa;color:#193a60}
+button.primary{background:var(--blue);color:white}button:focus-visible,a:focus-visible{outline:3px solid #f6b73c;outline-offset:3px}
+.status{margin-left:auto;color:#60718a;font-size:14px;font-weight:650}
+.progress{height:7px;background:#e7eef7}.bar{height:100%;width:0;background:linear-gradient(90deg,#60a5fa,#1d4ed8);transition:width .1s linear}
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+.info{background:#fff;border:1px solid #e5edf6;border-radius:16px;padding:17px}.info small{display:block;color:#7b8ba1;font-weight:700;letter-spacing:.8px}.info strong{display:block;margin-top:6px;color:var(--navy);font-size:18px}
+.note{font-size:13px;color:#75849a;line-height:1.7;margin-top:18px}
+@media(max-width:650px){.info-grid{grid-template-columns:1fr}.status{width:100%;margin-left:0}.controls{gap:8px}button{padding:10px 14px}}
+</style>
+</head>
+<body>
+<header><a class="brand" href="index.html">P.</a><a class="back" href="index.html#projects">← กลับหน้า Portfolio</a></header>
+<main>
+<div class="eyebrow">INTERACTIVE PROJECT / 3D-STYLE VISUALIZATION</div>
+<h1>3D Train Journey</h1>
+<p class="lead">จำลองการเดินทางด้วยรถไฟระหว่างเชียงใหม่และพิษณุโลก พร้อมควบคุมการเคลื่อนที่ได้</p>
+<div class="scene-wrap">
+<canvas id="scene" width="1200" height="675" aria-label="ภาพจำลองรถไฟสามมิติกำลังวิ่งผ่านภูเขา"></canvas>
+<div class="progress"><div class="bar" id="bar"></div></div>
+<div class="controls">
+<button class="primary" id="play">▶ เล่น</button><button id="pause">Ⅱ หยุดชั่วคราว</button><button id="restart">↻ เริ่มใหม่</button><button id="reverse">⇄ กลับทิศทาง</button>
+<span class="status" id="status">พร้อมออกเดินทาง · เชียงใหม่ → พิษณุโลก</span>
+</div>
+</div>
+<div class="info-grid">
+<div class="info"><small>ต้นทาง</small><strong id="from">เชียงใหม่</strong></div>
+<div class="info"><small>ปลายทาง</small><strong id="to">พิษณุโลก</strong></div>
+<div class="info"><small>ความคืบหน้า</small><strong id="percent">0%</strong></div>
+</div>
+<p class="note">หมายเหตุ: หน้านี้เป็นภาพจำลองการเคลื่อนที่เพื่อสาธิตแนวคิด 3D Train Journey ไม่ใช่ระบบติดตามรถไฟแบบเรียลไทม์ และตำแหน่งรถไฟ/ภูมิประเทศเป็นภาพประกอบ ไม่ใช่แผนที่เส้นทางจริง</p>
+</main>
+<script>
+const canvas=document.getElementById('scene'),ctx=canvas.getContext('2d');
+const playBtn=document.getElementById('play'),pauseBtn=document.getElementById('pause'),restartBtn=document.getElementById('restart'),reverseBtn=document.getElementById('reverse');
+const bar=document.getElementById('bar'),statusEl=document.getElementById('status'),percentEl=document.getElementById('percent'),fromEl=document.getElementById('from'),toEl=document.getElementById('to');
+let progress=0,playing=false,direction=1,last=0,raf=0;
+const W=1200,H=675;
+function polygon(points,fill){ctx.fillStyle=fill;ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fill()}
+function line(points,color,width){ctx.strokeStyle=color;ctx.lineWidth=width;ctx.lineCap='round';ctx.beginPath();points.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke()}
+function drawTree(x,y,s){ctx.save();ctx.translate(x,y);ctx.scale(s,s);polygon([[0,-78],[-31,-25],[-15,-25],[-43,10],[-15,7],[-53,48],[53,48],[15,7],[43,10],[15,-25],[31,-25]],'#245b4c');ctx.fillStyle='#654b38';ctx.fillRect(-5,45,10,34);ctx.restore()}
+function drawTrain(x,y,scale){ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);
+ // cast shadow
+ ctx.fillStyle='#173b4c33';ctx.beginPath();ctx.ellipse(0,88,170,23,0,0,Math.PI*2);ctx.fill();
+ // rear carriage
+ polygon([[-190,-12],[-75,-12],[-75,58],[-190,58]],'#e7edf3');polygon([[-190,-12],[-75,-12],[-75,1],[-190,1]],'#1e5b91');
+ for(let i=0;i<3;i++){ctx.fillStyle='#75b8df';ctx.fillRect(-176+i*34,7,24,25)}
+ // main body
+ polygon([[-88,-27],[90,-27],[132,-4],[132,58],[-88,58]],'#f8fbff');
+ polygon([[-88,-27],[90,-27],[132,-4],[-88,-4]],'#2d75b8');
+ polygon([[90,-27],[132,-4],[132,58],[90,58]],'#d6e2ed');
+ polygon([[-88,33],[132,33],[132,48],[-88,48]],'#e4a33c');
+ // windshield
+ polygon([[78,-19],[112,-1],[78,-1]],'#173c5b');
+ for(let i=0;i<3;i++){ctx.fillStyle='#78bfe7';ctx.fillRect(-65+i*43,4,30,24)}
+ // front lights and wheels
+ ctx.fillStyle='#fff4b5';ctx.beginPath();ctx.arc(118,25,5,0,Math.PI*2);ctx.fill();
+ for(let i=0;i<5;i++){ctx.fillStyle='#26394b';ctx.beginPath();ctx.arc(-62+i*43,61,13,0,Math.PI*2);ctx.fill();ctx.fillStyle='#9aa9b8';ctx.beginPath();ctx.arc(-62+i*43,61,5,0,Math.PI*2);ctx.fill()}
+ ctx.restore()}
+function draw(){
+ const g=ctx.createLinearGradient(0,0,0,H);g.addColorStop(0,'#8bc9ee');g.addColorStop(.56,'#d8effb');g.addColorStop(1,'#e5f0d9');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ // sun
+ ctx.fillStyle='#fff4cf';ctx.beginPath();ctx.arc(940,105,48,0,Math.PI*2);ctx.fill();
+ // distant ridges
+ polygon([[0,340],[130,160],[240,300],[390,115],[540,310],[690,150],[820,310],[990,140],[1200,330],[1200,520],[0,520]],'#8cb6aa');
+ polygon([[0,390],[180,245],[310,380],[500,210],[680,390],[850,230],[1030,390],[1150,270],[1200,330],[1200,560],[0,560]],'#5e947d');
+ // valley
+ polygon([[0,405],[230,340],[410,410],[620,335],[830,420],[1030,350],[1200,400],[1200,560],[0,560]],'#a6c99b');
+ // trees
+ for(let i=0;i<18;i++){let x=((i*113+25)%1250);drawTree(x,420+(i%4)*18,.48+(i%3)*.12)}
+ // ground
+ polygon([[0,480],[1200,440],[1200,675],[0,675]],'#789d70');
+ // perspective rails
+ const shift=(progress*260*direction)%90;
+ line([[0,585],[520,505],[1200,585]],'#4b5660',12);line([[0,625],[520,520],[1200,625]],'#4b5660',12);
+ line([[0,578],[520,498],[1200,578]],'#dce1e5',5);line([[0,618],[520,513],[1200,618]],'#dce1e5',5);
+ // sleepers
+ for(let i=0;i<24;i++){let t=((i/23+progress*0.4)%1);let x=1200*t,y=600-90*Math.sin(t*Math.PI);line([[x-13,y-9],[x+15,y+9]],'#705a45',5)}
+ // route labels
+ ctx.fillStyle='#173b5d';ctx.font='700 23px system-ui';ctx.fillText(direction===1?'เชียงใหม่':'พิษณุโลก',48,65);
+ ctx.textAlign='right';ctx.fillText(direction===1?'พิษณุโลก':'เชียงใหม่',1150,65);ctx.textAlign='left';
+ // train moves along a gentle perspective arc
+ const t=progress;const x=190+t*760;const y=425-35*Math.sin(t*Math.PI);const s=.72+.23*Math.sin(t*Math.PI);
+ drawTrain(x,y,s);
+ // title plate
+ ctx.fillStyle='#ffffffd9';ctx.beginPath();ctx.roundRect(35,560,310,72,16);ctx.fill();ctx.fillStyle='#173b5d';ctx.font='700 19px system-ui';ctx.fillText('NORTHERN THAILAND RAIL',55,590);ctx.font='14px system-ui';ctx.fillStyle='#58718b';ctx.fillText('Interactive journey simulation',55,615);
+}
+function updateUI(){bar.style.width=(progress*100)+'%';percentEl.textContent=Math.round(progress*100)+'%';fromEl.textContent=direction===1?'เชียงใหม่':'พิษณุโลก';toEl.textContent=direction===1?'พิษณุโลก':'เชียงใหม่';statusEl.textContent=playing?'กำลังเดินทาง · '+(direction===1?'เชียงใหม่ → พิษณุโลก':'พิษณุโลก → เชียงใหม่'):(progress>=1?'ถึงปลายทางแล้ว': 'หยุดชั่วคราว · '+(direction===1?'เชียงใหม่ → พิษณุโลก':'พิษณุโลก → เชียงใหม่'))}
+function tick(ts){if(!playing)return;const dt=Math.min((ts-last)/1000,.05);last=ts;progress+=dt*.055;if(progress>=1){progress=1;playing=false}draw();updateUI();if(playing)raf=requestAnimationFrame(tick)}
+playBtn.onclick=()=>{if(progress>=1)progress=0;playing=true;last=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);updateUI()};
+pauseBtn.onclick=()=>{playing=false;cancelAnimationFrame(raf);draw();updateUI()};
+restartBtn.onclick=()=>{playing=false;cancelAnimationFrame(raf);progress=0;draw();updateUI()};
+reverseBtn.onclick=()=>{direction*=-1;progress=0;playing=false;cancelAnimationFrame(raf);draw();updateUI()};
+draw();updateUI();
+</script>
+</body></html>
